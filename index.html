@@ -278,7 +278,8 @@ const RL={admin:'管理者',manager:'マネジャー',general:'一般'};
 const RB={admin:'pill-red',manager:'pill-yellow',general:'pill-blue'};
 const EMOJIS=['👍','❤️','😂','😮','🙏','🎉'];
 
-let db={stores:[],users:[],announcements:[],reads:[],comments:[],reactions:[]};
+let db={stores:[],users:[],announcements:[],reads:[],comments:[],reactions:[],scheduleDepts:[],schedules:[]};
+let selectedChief=null;
 let currentUser=null;
 let currentPage='list';
 let currentDetailId=null;
@@ -342,16 +343,19 @@ async function tryRestore(){
 async function loadDB(){
   showLoading(true);
   try{
-    const [stores,users,announcements,reads,comments,reactions]=await Promise.all([
+    const [stores,users,announcements,reads,comments,reactions,scheduleDepts,schedules]=await Promise.all([
       sbGet('stores','select=id,name,dept'),
       sbGet('users','select=id,name,role,store_ids,divisions'),
       sbGet('announcements','order=created_at.desc'),
       sbGet('announcement_reads',''),
       sbGet('comments','order=created_at.asc'),
-      sbGet('reactions','')
+      sbGet('reactions',''),
+      sbGet('schedule_depts','select=id,store_id,name,chiefs'),
+      sbGet('schedules','select=date,chief_name,dept,name,start_time,end_time,note,category&order=date.asc')
     ]);
     db.stores=stores||[];db.users=users||[];db.announcements=announcements||[];
     db.reads=reads||[];db.comments=comments||[];db.reactions=reactions||[];
+    db.scheduleDepts=scheduleDepts||[];db.schedules=schedules||[];
   }catch(e){console.error('loadDB error',e);}
   showLoading(false);
 }
@@ -392,6 +396,7 @@ async function startApp(){
 function renderNav(){
   const items=[
     {id:'list',ic:'📋',label:'お知らせ一覧'},
+    {id:'calendar',ic:'📅',label:'チーフの予定'},
   ];
   if(canPost())items.push({id:'new',ic:'✏️',label:'新規投稿'});
   if(isAdmin())items.push({id:'admin',ic:'⚙️',label:'管理者画面'});
@@ -406,6 +411,7 @@ function goPage(page,arg){
   if(page==='list')renderListPage();
   else if(page==='detail')renderDetailPage(arg);
   else if(page==='admin')renderAdminPage();
+  else if(page==='calendar')renderCalendarPage();
 }
 
 /* ===== お知らせ一覧 ===== */
@@ -461,6 +467,52 @@ function renderListPage(){
 }
 function setTab(d){activeTab=d;renderListPage();}
 function esc(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+/* ===== チーフの予定 ===== */
+function chiefsList(){
+  const set=new Set();
+  db.scheduleDepts.forEach(d=>(d.chiefs||[]).forEach(c=>{if(c&&c.name)set.add(c.name);}));
+  db.schedules.forEach(s=>{if(s.chief_name)set.add(s.chief_name);});
+  return [...set].sort((a,b)=>a.localeCompare(b,'ja'));
+}
+function schedulesForChief(name){
+  const todayStr=new Date().toISOString().slice(0,10);
+  return db.schedules.filter(s=>s.chief_name===name&&s.date>=todayStr).sort((a,b)=>a.date<b.date?-1:1);
+}
+function renderCalendarPage(){
+  document.getElementById('topbar-title').textContent='チーフの予定';
+  document.getElementById('topbar-right').innerHTML='';
+  const chiefs=chiefsList();
+  if(!selectedChief||!chiefs.includes(selectedChief))selectedChief=chiefs[0]||null;
+  const tabsHtml=chiefs.map(c=>`<div class="tab ${selectedChief===c?'active':''}" onclick="selectChief('${esc(c)}')">${esc(c)}</div>`).join('');
+  let listHtml='';
+  if(!selectedChief){
+    listHtml=`<div class="empty-state"><div class="ic">📅</div>チーフ情報がまだ登録されていません</div>`;
+  }else{
+    const scheds=schedulesForChief(selectedChief);
+    if(!scheds.length){
+      listHtml=`<div class="empty-state"><div class="ic">📅</div>今後の予定はまだありません</div>`;
+    }else{
+      listHtml=scheds.map(s=>{
+        const d=new Date(s.date);
+        const dateLabel=d.toLocaleDateString('ja-JP',{month:'numeric',day:'numeric',weekday:'short'});
+        const timeLabel=(s.start_time||'')+(s.end_time?('〜'+s.end_time):'');
+        return `<div class="card" style="cursor:default;">
+          <div class="card-top">
+            <div class="card-title">${esc(dateLabel)} ${timeLabel?('・'+esc(timeLabel)):''}</div>
+          </div>
+          <div class="card-body">${esc(s.name||s.dept||'')}${s.note?('　'+esc(s.note)):''}</div>
+        </div>`;
+      }).join('');
+    }
+  }
+  document.getElementById('content').innerHTML=`
+    <div class="page-header"><div><h1>チーフの予定</h1><p>スケジュールアプリの登録内容を確認できます(閲覧のみ)</p></div></div>
+    <div class="tabs">${tabsHtml}</div>
+    ${listHtml}
+  `;
+}
+function selectChief(name){selectedChief=name;renderCalendarPage();}
 
 /* ===== 詳細ページ ===== */
 async function renderDetailPage(id){
