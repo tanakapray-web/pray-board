@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="PRAY BOARD">
+<title>PRAY BOARD | 社内掲示板</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{--bg:#f3f2ee;--bg2:#ffffff;--bg3:#ecebe6;--border:#e1dfd8;--accent:#2f74d0;--accent2:#6d52e0;--green:#1d9e75;--yellow:#b07d00;--red:#d14343;--text:#1f2329;--text2:#6b7280;--text3:#9aa1ad;}
+body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased;}
+a{color:inherit;text-decoration:none;}
+button{font-family:inherit;cursor:pointer;}
+
+/* ===== ログイン ===== */
+#login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+.login-box{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:40px;width:100%;max-width:400px;box-shadow:0 4px 24px rgba(0,0,0,.04);}
+.login-logo{text-align:center;margin-bottom:28px;}
+.login-logo .mark{font-size:11px;letter-spacing:4px;color:var(--accent);text-transform:uppercase;margin-bottom:8px;font-weight:700;}
+.login-logo h1{font-size:20px;font-weight:700;}
+.login-logo p{font-size:12px;color:var(--text2);margin-top:4px;}
+.login-err{display:none;background:rgba(209,67,67,.1);color:var(--red);font-size:12px;padding:9px 12px;border-radius:8px;margin-bottom:14px;text-align:center;}
+.form-group{display:flex;flex-direction:column;gap:5px;}
+.form-label{font-size:12px;color:var(--text2);font-weight:500;}
+.form-input,.form-select,.form-textarea{background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:10px 12px;color:var(--text);font-size:14px;font-family:'Noto Sans JP',sans-serif;transition:border-color .15s;outline:none;width:100%;}
+.form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--accent);}
+.form-textarea{resize:vertical;min-height:100px;line-height:1.6;}
+.btn{border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:all .15s;font-family:'Noto Sans JP',sans-serif;}
+.btn-primary{background:var(--accent);color:#fff;}.btn-primary:hover{background:#4a86dc;}
+.btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border);}.btn-ghost:hover{background:var(--bg3);color:var(--text);}
+.btn-danger{background:rgba(209,67,67,.1);color:var(--red);}.btn-danger:hover{background:rgba(209,67,67,.18);}
+.btn-sm{padding:6px 11px;font-size:12px;}
+.btn:disabled{opacity:.5;cursor:not-allowed;}
+
+/* ===== レイアウト ===== */
+#app{display:none;}
+.layout{display:flex;min-height:100vh;}
+.sidebar{width:220px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;transition:transform .2s;}
+.logo{padding:22px 20px 18px;border-bottom:1px solid var(--border);}
+.logo .mark{font-size:10px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin-bottom:3px;font-weight:700;}
+.logo h2{font-size:15px;font-weight:700;}
+.logo .sub{font-size:11px;color:var(--text2);margin-top:2px;}
+.nav{flex:1;padding:14px 10px;overflow-y:auto;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer;color:var(--text2);font-size:13px;transition:all .15s;margin-bottom:2px;user-select:none;}
+.nav-item:hover{background:var(--bg3);color:var(--text);}
+.nav-item.active{background:rgba(47,116,208,.12);color:var(--accent);font-weight:600;}
+.nav-item .ic{font-size:16px;width:20px;text-align:center;}
+.nav-badge{margin-left:auto;background:var(--red);color:#fff;font-size:10px;font-weight:700;border-radius:10px;padding:1px 6px;min-width:18px;text-align:center;}
+.sidebar-footer{padding:14px 16px;border-top:1px solid var(--border);}
+.user-chip{display:flex;align-items:center;gap:9px;margin-bottom:10px;}
+.user-avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0;}
+.user-info .name{font-size:13px;font-weight:600;}
+.user-info .role{font-size:11px;color:var(--text2);}
+.logout-btn{width:100%;padding:7px;background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--text2);font-size:12px;cursor:pointer;font-family:'Noto Sans JP',sans-serif;}
+.logout-btn:hover{background:var(--bg3);color:var(--text);}
+
+.main{flex:1;margin-left:220px;min-height:100vh;display:flex;flex-direction:column;}
+.topbar{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 24px;height:54px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
+.topbar-title{font-size:15px;font-weight:700;}
+.menu-btn{display:none;background:none;border:none;font-size:20px;color:var(--text);cursor:pointer;}
+.content{padding:22px 24px 60px;max-width:900px;width:100%;margin:0 auto;}
+.page-header{margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+.page-header h1{font-size:19px;font-weight:700;}
+.page-header p{font-size:13px;color:var(--text2);margin-top:2px;}
+
+/* ===== グループタブ ===== */
+.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;margin-bottom:16px;}
+.tab{flex-shrink:0;padding:8px 14px;border-radius:20px;font-size:12.5px;font-weight:500;color:var(--text2);background:var(--bg2);border:1px solid var(--border);cursor:pointer;white-space:nowrap;}
+.tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+/* ===== カード ===== */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:12px;cursor:pointer;transition:border-color .15s;}
+.card:hover{border-color:var(--accent);}
+.card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+.card-title{font-size:14.5px;font-weight:700;line-height:1.5;}
+.unread-dot{width:8px;height:8px;border-radius:50%;background:var(--red);flex-shrink:0;margin-top:5px;}
+.card-body{font-size:13px;color:var(--text2);margin-top:6px;line-height:1.6;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+.card-meta{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:11.5px;color:var(--text3);flex-wrap:wrap;}
+.pill{display:inline-flex;align-items:center;font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:20px;}
+.pill-blue{background:rgba(47,116,208,.13);color:var(--accent);}
+.pill-purple{background:rgba(109,82,224,.13);color:var(--accent2);}
+.pill-gray{background:rgba(136,146,164,.13);color:var(--text2);}
+.pill-red{background:rgba(209,67,67,.12);color:var(--red);}
+.pill-yellow{background:rgba(176,125,0,.12);color:var(--yellow);}
+.card-stats{display:flex;align-items:center;gap:12px;margin-top:2px;}
+.stat{font-size:11.5px;color:var(--text3);display:flex;align-items:center;gap:3px;}
+.empty-state{text-align:center;padding:60px 20px;color:var(--text3);}
+.empty-state .ic{font-size:36px;margin-bottom:10px;}
+
+/* ===== 詳細 ===== */
+.detail-back{display:inline-flex;align-items:center;gap:5px;font-size:13px;color:var(--text2);margin-bottom:14px;cursor:pointer;}
+.detail-back:hover{color:var(--accent);}
+.detail-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:16px;}
+.detail-title{font-size:19px;font-weight:700;line-height:1.5;margin-bottom:10px;}
+.detail-meta{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text3);margin-bottom:18px;flex-wrap:wrap;}
+.detail-body{font-size:14px;line-height:1.9;white-space:pre-wrap;word-break:break-word;}
+.detail-images{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;}
+.detail-images img{width:140px;height:140px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:pointer;}
+.read-info{font-size:11.5px;color:var(--text3);margin-top:16px;padding-top:14px;border-top:1px solid var(--border);}
+
+.reaction-bar{display:flex;gap:6px;margin-top:18px;flex-wrap:wrap;}
+.react-btn{background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:6px 12px;font-size:13px;display:flex;align-items:center;gap:5px;color:var(--text2);}
+.react-btn.mine{background:rgba(47,116,208,.13);border-color:var(--accent);color:var(--accent);}
+.react-btn .cnt{font-size:11.5px;font-weight:700;}
+.react-add{background:var(--bg2);border:1px dashed var(--border);border-radius:20px;padding:6px 12px;font-size:13px;color:var(--text3);}
+.emoji-picker{display:none;gap:4px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:8px;margin-top:8px;flex-wrap:wrap;}
+.emoji-picker.show{display:flex;}
+.emoji-picker button{font-size:19px;background:none;border:none;padding:5px 7px;border-radius:6px;}
+.emoji-picker button:hover{background:var(--bg3);}
+
+/* ===== コメント ===== */
+.comments-section{margin-top:18px;}
+.comments-title{font-size:13px;font-weight:700;margin-bottom:12px;color:var(--text2);}
+.comment{display:flex;gap:10px;margin-bottom:16px;}
+.comment-avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;}
+.comment-body{flex:1;background:var(--bg3);border-radius:10px;padding:10px 13px;}
+.comment-name{font-size:12.5px;font-weight:700;margin-bottom:2px;}
+.comment-text{font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word;}
+.comment-time{font-size:10.5px;color:var(--text3);margin-top:4px;}
+.comment-input-row{display:flex;gap:10px;margin-top:14px;align-items:flex-end;}
+.comment-input-row textarea{flex:1;min-height:44px;max-height:120px;}
+
+/* ===== モーダル ===== */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(20,20,20,.45);z-index:1000;align-items:center;justify-content:center;padding:16px;}
+.modal-overlay.show{display:flex;}
+.modal{background:var(--bg2);border-radius:14px;width:100%;max-width:560px;max-height:88vh;display:flex;flex-direction:column;}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--border);}
+.modal-title{font-size:15px;font-weight:700;}
+.modal-close{background:none;border:none;font-size:18px;color:var(--text3);cursor:pointer;}
+.modal-body{padding:20px;overflow-y:auto;}
+.modal-footer{padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;}
+.form-row{margin-bottom:14px;}
+.radio-row{display:flex;gap:10px;flex-wrap:wrap;}
+.radio-chip{padding:7px 13px;border-radius:20px;border:1px solid var(--border);font-size:12.5px;cursor:pointer;color:var(--text2);}
+.radio-chip.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+.img-upload-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+.img-thumb{position:relative;width:74px;height:74px;border-radius:8px;overflow:hidden;border:1px solid var(--border);}
+.img-thumb img{width:100%;height:100%;object-fit:cover;}
+.img-thumb .rm{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;line-height:1;cursor:pointer;}
+.img-add-btn{width:74px;height:74px;border-radius:8px;border:1px dashed var(--border);background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--text3);cursor:pointer;}
+
+/* ===== 管理者画面 ===== */
+.admin-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;}
+.admin-row-title{font-size:13.5px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.admin-row-meta{font-size:11.5px;color:var(--text3);margin-top:2px;}
+.admin-actions{display:flex;gap:6px;flex-shrink:0;}
+
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:#1f2329;color:#fff;padding:11px 20px;border-radius:8px;font-size:13px;opacity:0;pointer-events:none;transition:all .25s;z-index:2000;}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+#loading-overlay{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:9999;font-size:14px;color:var(--text2);}
+
+@media(max-width:820px){
+  .sidebar{transform:translateX(-100%);box-shadow:2px 0 20px rgba(0,0,0,.15);}
+  .sidebar.open{transform:translateX(0);}
+  .main{margin-left:0;}
+  .menu-btn{display:block;}
+  .content{padding:16px 14px 60px;}
+}
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo"><div class="mark">PRAY HIRA</div><h1>PRAY BOARD</h1><p>社内お知らせ・連絡掲示板</p></div>
+    <div class="login-err" id="login-err">IDまたはパスワードが違います</div>
+    <div class="form-group" style="margin-bottom:12px;"><label class="form-label">ログインID</label><input type="text" class="form-input" id="login-id" placeholder="ID" autocomplete="username"></div>
+    <div class="form-group" style="margin-bottom:20px;"><label class="form-label">パスワード</label><input type="password" class="form-input" id="login-pw" placeholder="パスワード" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="btn btn-primary" style="width:100%;padding:11px;justify-content:center;" onclick="doLogin()">ログイン</button>
+    <div style="text-align:center;margin-top:16px;font-size:12px;color:var(--text2);">売上・スケジュール管理アプリと同じIDでログインできます</div>
+  </div>
+</div>
+
+<div id="app">
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+  <div class="logo"><div class="mark">PRAY HIRA</div><h2>PRAY BOARD</h2><div class="sub">社内掲示板</div></div>
+  <div class="nav" id="sidebar-nav"></div>
+  <div class="sidebar-footer">
+    <div class="user-chip"><div class="user-avatar" id="sb-avatar">?</div><div class="user-info"><div class="name" id="sb-name">—</div><div class="role" id="sb-role">—</div></div></div>
+    <button class="logout-btn" onclick="doLogout()">ログアウト</button>
+  </div>
+</nav>
+<div class="main">
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button class="menu-btn" onclick="toggleSidebar()">☰</button>
+      <div class="topbar-title" id="topbar-title">お知らせ</div>
+    </div>
+    <div id="topbar-right"></div>
+  </div>
+  <div class="content" id="content"></div>
+</div>
+</div>
+</div>
+
+<!-- 投稿・編集モーダル -->
+<div class="modal-overlay" id="post-modal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title" id="post-modal-title">お知らせを投稿</div><button class="modal-close" onclick="closeModal('post-modal')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-row"><label class="form-label">タイトル *</label><input type="text" class="form-input" id="pm-title" placeholder="件名を入力"></div>
+      <div class="form-row"><label class="form-label">本文 *</label><textarea class="form-textarea" id="pm-body" placeholder="内容を入力" style="min-height:160px;"></textarea></div>
+      <div class="form-row">
+        <label class="form-label">公開範囲</label>
+        <div class="radio-row" id="pm-target-type">
+          <div class="radio-chip active" data-v="all">全社員</div>
+          <div class="radio-chip" data-v="division">事業部</div>
+          <div class="radio-chip" data-v="store">店舗</div>
+        </div>
+      </div>
+      <div class="form-row" id="pm-division-row" style="display:none;">
+        <label class="form-label">対象事業部</label>
+        <select class="form-select" id="pm-division"></select>
+      </div>
+      <div class="form-row" id="pm-store-row" style="display:none;">
+        <label class="form-label">対象店舗</label>
+        <select class="form-select" id="pm-store"></select>
+      </div>
+      <div class="form-row">
+        <label class="form-label">画像添付</label>
+        <div class="img-upload-row" id="pm-images">
+          <div class="img-add-btn" onclick="document.getElementById('pm-file').click()">＋</div>
+        </div>
+        <input type="file" id="pm-file" accept="image/*" multiple style="display:none;" onchange="onPickImages(event)">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('post-modal')">キャンセル</button>
+      <button class="btn btn-primary" id="pm-save-btn" onclick="savePost()">投稿する</button>
+    </div>
+  </div>
+</div>
+
+<!-- 画像プレビューモーダル -->
+<div class="modal-overlay" id="img-modal" onclick="closeModal('img-modal')">
+  <img id="img-modal-src" style="max-width:92vw;max-height:90vh;border-radius:8px;">
+</div>
+
+<div id="toast">✓ 保存しました</div>
+
+<script>
+const SUPABASE_URL='https://nxaepscqkxpldvunbhri.supabase.co';
+const SUPABASE_KEY='sb_publishable_9sDcDJjq0wCdAP_9AkEXeQ_tvectEFa';
+
+async function sbFetch(path,method='GET',body=null,extraHeaders={}){
+  const opts={method,headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Prefer':'return=representation',...extraHeaders}};
+  if(body)opts.body=JSON.stringify(body);
+  const res=await fetch(SUPABASE_URL+'/rest/v1/'+path,opts);
+  if(!res.ok){const e=await res.text();console.error('Supabase error:',e);return null;}
+  const text=await res.text();return text?JSON.parse(text):null;
+}
+async function sbGet(table,query=''){return await sbFetch(table+'?'+query);}
+async function sbInsert(table,data){return await sbFetch(table,'POST',data);}
+async function sbUpdate(table,query,data){return await sbFetch(table+'?'+query,'PATCH',data);}
+async function sbDelete(table,query){return await sbFetch(table+'?'+query,'DELETE');}
+async function sbUpsert(table,data,onConflict){
+  const opts={method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Prefer':'resolution=merge-duplicates,return=representation'}};
+  opts.body=JSON.stringify(data);
+  const res=await fetch(SUPABASE_URL+'/rest/v1/'+table+(onConflict?('?on_conflict='+onConflict):''),opts);
+  const text=await res.text();return text?JSON.parse(text):null;
+}
+async function sbUpload(bucket,path,file){
+  const res=await fetch(SUPABASE_URL+'/storage/v1/object/'+bucket+'/'+path,{
+    method:'POST',
+    headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':file.type,'x-upsert':'true'},
+    body:file
+  });
+  if(!res.ok){console.error('upload error',await res.text());return null;}
+  return SUPABASE_URL+'/storage/v1/object/public/'+bucket+'/'+path;
+}
+
+const RL={admin:'管理者',manager:'マネジャー',general:'一般'};
+const RB={admin:'pill-red',manager:'pill-yellow',general:'pill-blue'};
+const EMOJIS=['👍','❤️','😂','😮','🙏','🎉'];
+
+let db={stores:[],users:[],announcements:[],reads:[],comments:[],reactions:[]};
+let currentUser=null;
+let currentPage='list';
+let currentDetailId=null;
+let activeTab='all';
+let pmImages=[]; // {url} 投稿モーダルの添付画像
+let editingAnnId=null;
+
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,8);}
+function today(){return new Date().toISOString();}
+function toast(msg='保存しました'){const t=document.getElementById('toast');t.textContent='✓ '+msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+function timeAgo(iso){
+  const d=new Date(iso),now=new Date();const diff=(now-d)/1000;
+  if(diff<60)return 'たった今';
+  if(diff<3600)return Math.floor(diff/60)+'分前';
+  if(diff<86400)return Math.floor(diff/3600)+'時間前';
+  if(diff<86400*7)return Math.floor(diff/86400)+'日前';
+  return d.toLocaleDateString('ja-JP',{month:'numeric',day:'numeric'});
+}
+function fullTime(iso){const d=new Date(iso);return d.toLocaleString('ja-JP',{year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});}
+function userName(id){const u=db.users.find(u=>u.id===id);return u?u.name:'不明';}
+function storeName(id){const s=db.stores.find(s=>s.id===id);return s?s.name:'';}
+function divisionOf(storeName){
+  const m=storeName.match(/^(SM|MM|FM|LFC|TMX)/);return m?m[1]:'';
+}
+function allDivisions(){
+  const set=new Set();
+  db.users.forEach(u=>(u.divisions||[]).forEach(d=>set.add(d)));
+  if(!set.size)['SM事業部','MM事業部','FM事業部','LFC事業部','TMX事業部'].forEach(d=>set.add(d));
+  return [...set];
+}
+
+/* ===== 認証 ===== */
+async function doLogin(){
+  const id=document.getElementById('login-id').value.trim(),pw=document.getElementById('login-pw').value;
+  if(!id||!pw)return;
+  showLoading(true);
+  const users=await sbGet('users','login_id=eq.'+encodeURIComponent(id));
+  showLoading(false);
+  const u=(users||[])[0];
+  if(!u||u.pw!==pw){document.getElementById('login-err').style.display='block';return;}
+  document.getElementById('login-err').style.display='none';
+  currentUser={...u,storeIds:u.store_ids||[],divisions:u.divisions||[]};
+  sessionStorage.setItem('pb_uid',currentUser.login_id);
+  startApp();
+}
+function doLogout(){
+  currentUser=null;sessionStorage.removeItem('pb_uid');
+  document.getElementById('app').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('login-id').value='';document.getElementById('login-pw').value='';
+}
+async function tryRestore(){
+  const sid=sessionStorage.getItem('pb_uid');if(!sid)return false;
+  const users=await sbGet('users','login_id=eq.'+encodeURIComponent(sid));
+  const u=(users||[])[0];if(!u)return false;
+  currentUser={...u,storeIds:u.store_ids||[],divisions:u.divisions||[]};
+  return true;
+}
+
+/* ===== データ読み込み ===== */
+async function loadDB(){
+  showLoading(true);
+  try{
+    const [stores,users,announcements,reads,comments,reactions]=await Promise.all([
+      sbGet('stores','select=id,name,dept'),
+      sbGet('users','select=id,name,role,store_ids,divisions'),
+      sbGet('announcements','order=created_at.desc'),
+      sbGet('announcement_reads',''),
+      sbGet('comments','order=created_at.asc'),
+      sbGet('reactions','')
+    ]);
+    db.stores=stores||[];db.users=users||[];db.announcements=announcements||[];
+    db.reads=reads||[];db.comments=comments||[];db.reactions=reactions||[];
+  }catch(e){console.error('loadDB error',e);}
+  showLoading(false);
+}
+function showLoading(show){
+  let el=document.getElementById('loading-overlay');
+  if(!el){el=document.createElement('div');el.id='loading-overlay';el.innerHTML='<div style="text-align:center"><div style="font-size:28px;margin-bottom:12px;">⏳</div>読み込み中...</div>';document.body.appendChild(el);}
+  el.style.display=show?'flex':'none';
+}
+
+/* ===== 権限・可視範囲 ===== */
+function canPost(){return currentUser.role==='admin'||currentUser.role==='manager';}
+function isAdmin(){return currentUser.role==='admin';}
+function visibleAnnouncements(){
+  return db.announcements.filter(a=>{
+    if(isAdmin())return true;
+    if(a.target_type==='all')return true;
+    if(a.target_type==='division')return (currentUser.divisions||[]).includes(a.target_dept);
+    if(a.target_type==='store')return (currentUser.storeIds||[]).includes(a.target_store_id);
+    return true;
+  });
+}
+function isRead(annId){return db.reads.some(r=>r.announcement_id===annId&&r.user_id===currentUser.id);}
+function readCount(annId){return db.reads.filter(r=>r.announcement_id===annId).length;}
+function commentsFor(annId){return db.comments.filter(c=>c.announcement_id===annId);}
+function reactionsFor(annId){return db.reactions.filter(r=>r.announcement_id===annId);}
+
+/* ===== 起動 ===== */
+async function startApp(){
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('sb-name').textContent=currentUser.name;
+  document.getElementById('sb-role').textContent=RL[currentUser.role]||currentUser.role;
+  document.getElementById('sb-avatar').textContent=(currentUser.name||'?').slice(0,1);
+  await loadDB();
+  renderNav();
+  goPage('list');
+}
+function renderNav(){
+  const items=[
+    {id:'list',ic:'📋',label:'お知らせ一覧'},
+  ];
+  if(canPost())items.push({id:'new',ic:'✏️',label:'新規投稿'});
+  if(isAdmin())items.push({id:'admin',ic:'⚙️',label:'管理者画面'});
+  const nav=document.getElementById('sidebar-nav');
+  nav.innerHTML=items.map(it=>`<div class="nav-item" data-page="${it.id}" onclick="goPage('${it.id}')"><span class="ic">${it.ic}</span><span>${it.label}</span></div>`).join('');
+}
+function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');}
+function goPage(page,arg){
+  currentPage=page;
+  document.getElementById('sidebar').classList.remove('open');
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.dataset.page===page));
+  if(page==='list')renderListPage();
+  else if(page==='detail')renderDetailPage(arg);
+  else if(page==='admin')renderAdminPage();
+}
+
+/* ===== お知らせ一覧 ===== */
+function renderListPage(){
+  document.getElementById('topbar-title').textContent='お知らせ';
+  document.getElementById('topbar-right').innerHTML=canPost()?`<button class="btn btn-primary btn-sm" onclick="openPostModal()">＋ 投稿</button>`:'';
+  const anns=visibleAnnouncements();
+  const divs=['all',...allDivisions()];
+  const tabsHtml=divs.map(d=>`<div class="tab ${activeTab===d?'active':''}" onclick="setTab('${d}')">${d==='all'?'すべて':d}</div>`).join('');
+  let list=anns;
+  if(activeTab!=='all'){
+    list=anns.filter(a=>{
+      if(a.target_type==='division')return a.target_dept===activeTab;
+      if(a.target_type==='store'){const sn=storeName(a.target_store_id);return divisionOf(sn)===activeTab.replace('事業部','');}
+      return false;
+    });
+  }
+  let cardsHtml='';
+  if(!list.length){
+    cardsHtml=`<div class="empty-state"><div class="ic">📭</div>お知らせはまだありません</div>`;
+  }else{
+    cardsHtml=list.map(a=>{
+      const unread=!isRead(a.id);
+      const cm=commentsFor(a.id).length;
+      const rc=reactionsFor(a.id).length;
+      let scopeLabel='全社',scopeCls='pill-gray';
+      if(a.target_type==='division'){scopeLabel=a.target_dept;scopeCls='pill-purple';}
+      else if(a.target_type==='store'){scopeLabel=storeName(a.target_store_id);scopeCls='pill-blue';}
+      return `<div class="card" onclick="goPage('detail','${a.id}')">
+        <div class="card-top">
+          <div class="card-title">${esc(a.title)}</div>
+          ${unread?'<div class="unread-dot"></div>':''}
+        </div>
+        <div class="card-body">${esc(a.body)}</div>
+        <div class="card-meta">
+          <span class="pill ${scopeCls}">${esc(scopeLabel)}</span>
+          <span>${esc(userName(a.author_id))}</span>
+          <span>・${timeAgo(a.created_at)}</span>
+        </div>
+        <div class="card-stats">
+          <span class="stat">💬 ${cm}</span>
+          <span class="stat">👍 ${rc}</span>
+          <span class="stat">既読 ${readCount(a.id)}人</span>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('content').innerHTML=`
+    <div class="page-header"><div><h1>お知らせ一覧</h1><p>店舗・部署ごとの連絡事項を確認できます</p></div></div>
+    <div class="tabs">${tabsHtml}</div>
+    ${cardsHtml}
+  `;
+}
+function setTab(d){activeTab=d;renderListPage();}
+function esc(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+/* ===== 詳細ページ ===== */
+async function renderDetailPage(id){
+  currentDetailId=id;
+  const a=db.announcements.find(x=>x.id===id);
+  if(!a){goPage('list');return;}
+  document.getElementById('topbar-title').textContent='お知らせ詳細';
+  document.getElementById('topbar-right').innerHTML='';
+  // 既読登録
+  if(!isRead(id)){
+    const rec=await sbInsert('announcement_reads',{announcement_id:id,user_id:currentUser.id});
+    if(rec)db.reads.push({announcement_id:id,user_id:currentUser.id,read_at:today()});
+  }
+  let scopeLabel='全社',scopeCls='pill-gray';
+  if(a.target_type==='division'){scopeLabel=a.target_dept;scopeCls='pill-purple';}
+  else if(a.target_type==='store'){scopeLabel=storeName(a.target_store_id);scopeCls='pill-blue';}
+  const imgs=(a.image_urls||[]);
+  const imagesHtml=imgs.length?`<div class="detail-images">${imgs.map(u=>`<img src="${u}" onclick="event.stopPropagation();openImg('${u}')">`).join('')}</div>`:'';
+  const reactions=reactionsFor(id);
+  const reactGrouped={};
+  reactions.forEach(r=>{reactGrouped[r.emoji]=reactGrouped[r.emoji]||[];reactGrouped[r.emoji].push(r.user_id);});
+  const reactHtml=Object.keys(reactGrouped).map(em=>{
+    const mine=reactGrouped[em].includes(currentUser.id);
+    return `<div class="react-btn ${mine?'mine':''}" onclick="toggleReaction('${id}','${em}')">${em} <span class="cnt">${reactGrouped[em].length}</span></div>`;
+  }).join('');
+  const cms=commentsFor(id);
+  const commentsHtml=cms.length?cms.map(c=>`
+    <div class="comment">
+      <div class="comment-avatar">${(userName(c.user_id)||'?').slice(0,1)}</div>
+      <div class="comment-body">
+        <div class="comment-name">${esc(userName(c.user_id))}</div>
+        <div class="comment-text">${esc(c.body)}</div>
+        <div class="comment-time">${fullTime(c.created_at)}</div>
+      </div>
+    </div>`).join(''):'<div style="font-size:12.5px;color:var(--text3);">まだコメントはありません</div>';
+
+  const canEdit=isAdmin()||a.author_id===currentUser.id;
+
+  document.getElementById('content').innerHTML=`
+    <div class="detail-back" onclick="goPage('list')">← 一覧に戻る</div>
+    <div class="detail-card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+        <div class="detail-title">${esc(a.title)}</div>
+        ${canEdit?`<div class="admin-actions"><button class="btn btn-ghost btn-sm" onclick="openPostModal('${a.id}')">編集</button><button class="btn btn-danger btn-sm" onclick="deleteAnnouncement('${a.id}')">削除</button></div>`:''}
+      </div>
+      <div class="detail-meta">
+        <span class="pill ${scopeCls}">${esc(scopeLabel)}</span>
+        <span>投稿者: ${esc(userName(a.author_id))}</span>
+        <span>${fullTime(a.created_at)}</span>
+      </div>
+      <div class="detail-body">${esc(a.body)}</div>
+      ${imagesHtml}
+      <div class="reaction-bar">
+        ${reactHtml}
+        <div class="react-add" onclick="toggleEmojiPicker()">＋ リアクション</div>
+      </div>
+      <div class="emoji-picker" id="emoji-picker">${EMOJIS.map(em=>`<button onclick="toggleReaction('${id}','${em}');toggleEmojiPicker()">${em}</button>`).join('')}</div>
+      <div class="read-info">既読 ${readCount(id)}人</div>
+    </div>
+    <div class="detail-card comments-section">
+      <div class="comments-title">💬 コメント (${cms.length})</div>
+      <div id="comments-list">${commentsHtml}</div>
+      <div class="comment-input-row">
+        <textarea class="form-textarea" id="new-comment" placeholder="コメントを入力..."></textarea>
+        <button class="btn btn-primary" onclick="postComment('${id}')">送信</button>
+      </div>
+    </div>
+  `;
+}
+function toggleEmojiPicker(){document.getElementById('emoji-picker').classList.toggle('show');}
+function openImg(url){document.getElementById('img-modal-src').src=url;document.getElementById('img-modal').classList.add('show');}
+
+async function toggleReaction(annId,emoji){
+  const mine=db.reactions.find(r=>r.announcement_id===annId&&r.user_id===currentUser.id&&r.emoji===emoji);
+  if(mine){
+    await sbDelete('reactions','announcement_id=eq.'+annId+'&user_id=eq.'+currentUser.id+'&emoji=eq.'+encodeURIComponent(emoji));
+    db.reactions=db.reactions.filter(r=>r!==mine);
+  }else{
+    const rec=await sbInsert('reactions',{announcement_id:annId,user_id:currentUser.id,emoji});
+    if(rec&&rec[0])db.reactions.push(rec[0]);
+  }
+  renderDetailPage(annId);
+}
+async function postComment(annId){
+  const ta=document.getElementById('new-comment');
+  const body=ta.value.trim();if(!body)return;
+  const rec=await sbInsert('comments',{announcement_id:annId,user_id:currentUser.id,body});
+  if(rec&&rec[0]){db.comments.push(rec[0]);toast('コメントを送信しました');}
+  renderDetailPage(annId);
+}
+
+/* ===== 投稿・編集モーダル ===== */
+function openPostModal(annId){
+  editingAnnId=annId||null;
+  pmImages=[];
+  document.getElementById('pm-title').value='';
+  document.getElementById('pm-body').value='';
+  setTargetType('all');
+  // 事業部セレクト初期化
+  const divSel=document.getElementById('pm-division');
+  divSel.innerHTML=allDivisions().map(d=>`<option value="${esc(d)}">${esc(d)}</option>`).join('');
+  const storeSel=document.getElementById('pm-store');
+  storeSel.innerHTML=db.stores.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+
+  if(annId){
+    const a=db.announcements.find(x=>x.id===annId);
+    document.getElementById('post-modal-title').textContent='お知らせを編集';
+    document.getElementById('pm-save-btn').textContent='更新する';
+    document.getElementById('pm-title').value=a.title;
+    document.getElementById('pm-body').value=a.body;
+    setTargetType(a.target_type||'all');
+    if(a.target_type==='division')divSel.value=a.target_dept;
+    if(a.target_type==='store')storeSel.value=a.target_store_id;
+    pmImages=(a.image_urls||[]).map(u=>({url:u}));
+  }else{
+    document.getElementById('post-modal-title').textContent='お知らせを投稿';
+    document.getElementById('pm-save-btn').textContent='投稿する';
+  }
+  renderPmImages();
+  document.getElementById('post-modal').classList.add('show');
+}
+function setTargetType(v){
+  document.querySelectorAll('#pm-target-type .radio-chip').forEach(el=>el.classList.toggle('active',el.dataset.v===v));
+  document.getElementById('pm-division-row').style.display=v==='division'?'block':'none';
+  document.getElementById('pm-store-row').style.display=v==='store'?'block':'none';
+}
+document.getElementById('pm-target-type').addEventListener('click',e=>{
+  const chip=e.target.closest('.radio-chip');if(!chip)return;
+  setTargetType(chip.dataset.v);
+});
+async function onPickImages(e){
+  const files=[...e.target.files];
+  for(const f of files){
+    const path=uid()+'_'+f.name.replace(/[^a-zA-Z0-9._-]/g,'');
+    const url=await sbUpload('announcement-images',path,f);
+    if(url)pmImages.push({url});
+  }
+  e.target.value='';
+  renderPmImages();
+}
+function renderPmImages(){
+  const wrap=document.getElementById('pm-images');
+  wrap.innerHTML=pmImages.map((im,i)=>`<div class="img-thumb"><img src="${im.url}"><button class="rm" onclick="removePmImage(${i})">✕</button></div>`).join('')
+    +'<div class="img-add-btn" onclick="document.getElementById(\'pm-file\').click()">＋</div>';
+}
+function removePmImage(i){pmImages.splice(i,1);renderPmImages();}
+
+async function savePost(){
+  const title=document.getElementById('pm-title').value.trim();
+  const body=document.getElementById('pm-body').value.trim();
+  if(!title||!body){toast('タイトルと本文は必須です');return;}
+  const targetType=document.querySelector('#pm-target-type .radio-chip.active').dataset.v;
+  const data={
+    title,body,
+    target_type:targetType,
+    target_dept:targetType==='division'?document.getElementById('pm-division').value:null,
+    target_store_id:targetType==='store'?document.getElementById('pm-store').value:null,
+    image_urls:pmImages.map(im=>im.url),
+    updated_at:today()
+  };
+  const btn=document.getElementById('pm-save-btn');btn.disabled=true;
+  if(editingAnnId){
+    const rec=await sbUpdate('announcements','id=eq.'+editingAnnId,data);
+    if(rec&&rec[0]){const idx=db.announcements.findIndex(a=>a.id===editingAnnId);db.announcements[idx]=rec[0];}
+    toast('更新しました');
+  }else{
+    data.author_id=currentUser.id;data.created_at=today();
+    const rec=await sbInsert('announcements',data);
+    if(rec&&rec[0])db.announcements.unshift(rec[0]);
+    toast('投稿しました');
+  }
+  btn.disabled=false;
+  closeModal('post-modal');
+  const gotoId=editingAnnId||(db.announcements[0]&&db.announcements[0].id);
+  if(currentPage==='detail'&&gotoId)renderDetailPage(gotoId);
+  else goPage('list');
+}
+async function deleteAnnouncement(id){
+  if(!confirm('このお知らせを削除しますか？コメント・リアクションも全て削除されます。'))return;
+  await sbDelete('comments','announcement_id=eq.'+id);
+  await sbDelete('reactions','announcement_id=eq.'+id);
+  await sbDelete('announcement_reads','announcement_id=eq.'+id);
+  await sbDelete('announcements','id=eq.'+id);
+  db.announcements=db.announcements.filter(a=>a.id!==id);
+  toast('削除しました');
+  goPage('list');
+}
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+
+/* ===== 管理者画面 ===== */
+function renderAdminPage(){
+  document.getElementById('topbar-title').textContent='管理者画面';
+  document.getElementById('topbar-right').innerHTML=`<button class="btn btn-primary btn-sm" onclick="openPostModal()">＋ 投稿</button>`;
+  const anns=[...db.announcements].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+  const rowsHtml=anns.length?anns.map(a=>{
+    let scope='全社';
+    if(a.target_type==='division')scope=a.target_dept;
+    else if(a.target_type==='store')scope=storeName(a.target_store_id);
+    return `<div class="admin-row">
+      <div style="min-width:0;flex:1;">
+        <div class="admin-row-title">${esc(a.title)}</div>
+        <div class="admin-row-meta">${esc(scope)} ・ ${esc(userName(a.author_id))} ・ ${fullTime(a.created_at)} ・ 既読${readCount(a.id)}人 ・ コメント${commentsFor(a.id).length}件</div>
+      </div>
+      <div class="admin-actions">
+        <button class="btn btn-ghost btn-sm" onclick="goPage('detail','${a.id}')">表示</button>
+        <button class="btn btn-ghost btn-sm" onclick="openPostModal('${a.id}')">編集</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteAnnouncement('${a.id}')">削除</button>
+      </div>
+    </div>`;
+  }).join(''):'<div class="empty-state"><div class="ic">📭</div>お知らせはまだありません</div>';
+
+  const totalUsers=db.users.length;
+  document.getElementById('content').innerHTML=`
+    <div class="page-header"><div><h1>管理者画面</h1><p>全お知らせの管理・既読状況の確認ができます</p></div></div>
+    <div class="card" style="display:flex;gap:24px;flex-wrap:wrap;">
+      <div><div style="font-size:11px;color:var(--text2);">お知らせ数</div><div style="font-size:20px;font-weight:700;">${anns.length}</div></div>
+      <div><div style="font-size:11px;color:var(--text2);">登録ユーザー数</div><div style="font-size:20px;font-weight:700;">${totalUsers}</div></div>
+    </div>
+    ${rowsHtml}
+  `;
+}
+
+/* ===== 初期化 ===== */
+(async function init(){
+  const restored=await tryRestore();
+  if(restored){await startApp();}
+})();
+</script>
+</body>
+</html>
