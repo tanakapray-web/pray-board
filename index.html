@@ -310,7 +310,7 @@ const RL={admin:'管理者',manager:'マネジャー',general:'一般'};
 const RB={admin:'pill-red',manager:'pill-yellow',general:'pill-blue'};
 const EMOJIS=['👍','❤️','😂','😮','🙏','🎉'];
 
-let db={stores:[],users:[],announcements:[],reads:[],comments:[],reactions:[],scheduleDepts:[],schedules:[],settings:{schedule_enabled:true,chief_order:[],division_order:[]}};
+let db={stores:[],users:[],announcements:[],reads:[],comments:[],reactions:[],scheduleDepts:[],schedules:[],settings:{schedule_enabled:true,chief_order:[],division_order:[],hidden_chiefs:[]}};
 let calMode='individual';
 let calView='month';
 let calDate=new Date();
@@ -395,7 +395,7 @@ async function loadDB(){
     db.reads=reads||[];db.comments=comments||[];db.reactions=reactions||[];
     db.scheduleDepts=scheduleDepts||[];db.schedules=schedules||[];
     const st=(settingsRows||[])[0];
-    if(st)db.settings={schedule_enabled:st.schedule_enabled!==false,chief_order:st.chief_order||[],division_order:st.division_order||[]};
+    if(st)db.settings={schedule_enabled:st.schedule_enabled!==false,chief_order:st.chief_order||[],division_order:st.division_order||[],hidden_chiefs:st.hidden_chiefs||[]};
   }catch(e){console.error('loadDB error',e);}
   showLoading(false);
 }
@@ -517,18 +517,20 @@ function sortByOrder(items,orderArr){
     return a.localeCompare(b,'ja');
   });
 }
-function chiefsListOrdered(){
+function chiefsListAll(){
   const set=new Set();
   db.scheduleDepts.forEach(d=>(d.chiefs||[]).forEach(c=>{if(c&&c.name)set.add(c.name);}));
   db.schedules.forEach(s=>{if(s.chief_name)set.add(s.chief_name);});
   return sortByOrder([...set],db.settings.chief_order);
 }
+function isChiefVisible(name){return !(db.settings.hidden_chiefs||[]).includes(name);}
+function chiefsListOrdered(){return chiefsListAll().filter(isChiefVisible);}
 const ALL_DIVISION_CODES=['SM','MM','FM','LFC','TMX'];
 function divisionsListOrdered(){return sortByOrder(ALL_DIVISION_CODES,db.settings.division_order);}
 function chiefsInDivision(code){
   const set=new Set();
   db.scheduleDepts.forEach(d=>{if(divisionOf(d.name)===code)(d.chiefs||[]).forEach(c=>{if(c&&c.name)set.add(c.name);});});
-  return sortByOrder([...set],db.settings.chief_order);
+  return sortByOrder([...set],db.settings.chief_order).filter(isChiefVisible);
 }
 function schedulesOn(dateStr,chiefName){return db.schedules.filter(s=>s.date===dateStr&&s.chief_name===chiefName);}
 function fmtDate(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
@@ -897,17 +899,23 @@ function renderAdminPage(){
 
 function renderAdminSettingsBlock(){
   if(!adminSettingsDraft){
-    adminSettingsDraft={schedule_enabled:db.settings.schedule_enabled!==false,chief_order:chiefsListOrdered().slice(),division_order:divisionsListOrdered().slice()};
+    adminSettingsDraft={schedule_enabled:db.settings.schedule_enabled!==false,chief_order:chiefsListAll().slice(),division_order:divisionsListOrdered().slice(),hidden_chiefs:(db.settings.hidden_chiefs||[]).slice()};
   }
   const d=adminSettingsDraft;
-  const chiefRows=d.chief_order.map((c,i)=>`
+  const chiefRows=d.chief_order.map((c,i)=>{
+    const visible=!d.hidden_chiefs.includes(c);
+    return `
     <div class="admin-row" style="padding:8px 12px;">
-      <div class="admin-row-title" style="flex:1;">${esc(c)}</div>
+      <label style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer;">
+        <input type="checkbox" ${visible?'checked':''} onchange="toggleChiefVisible('${esc(c)}',this.checked)">
+        <div class="admin-row-title">${esc(c)}</div>
+      </label>
       <div class="admin-actions">
         <button class="btn btn-ghost btn-sm" onclick="moveChiefDraft(${i},-1)" ${i===0?'disabled':''}>▲</button>
         <button class="btn btn-ghost btn-sm" onclick="moveChiefDraft(${i},1)" ${i===d.chief_order.length-1?'disabled':''}>▼</button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   const divRows=d.division_order.map((c,i)=>`
     <div class="admin-row" style="padding:8px 12px;">
       <div class="admin-row-title" style="flex:1;">${esc(c)}事業部</div>
@@ -921,15 +929,21 @@ function renderAdminSettingsBlock(){
       <div class="comments-title" style="margin-bottom:14px;">⚙ スケジュール機能の設定</div>
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:16px;cursor:pointer;">
         <input type="checkbox" ${d.schedule_enabled?'checked':''} onchange="adminSettingsDraft.schedule_enabled=this.checked">
-        「スケジュール」をサイドバーに表示する
+        「スケジュール」をサイドバーに表示する(機能全体のオン/オフ)
       </label>
-      <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600;">チーフの表示順</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600;">チーフごとの表示・並び順(チェックを外すとPRAY BOARDに表示されません)</div>
       ${chiefRows||'<div style="font-size:12px;color:var(--text3);">チーフが登録されていません</div>'}
       <div style="font-size:12px;color:var(--text2);margin:16px 0 6px;font-weight:600;">事業部の表示順</div>
       ${divRows}
       <button class="btn btn-primary" style="margin-top:16px;" onclick="saveBoardSettings()">設定を保存</button>
     </div>
   `;
+}
+function toggleChiefVisible(name,checked){
+  const arr=adminSettingsDraft.hidden_chiefs;
+  const idx=arr.indexOf(name);
+  if(checked){if(idx>=0)arr.splice(idx,1);}
+  else{if(idx<0)arr.push(name);}
 }
 function moveChiefDraft(i,dir){
   const arr=adminSettingsDraft.chief_order;const j=i+dir;if(j<0||j>=arr.length)return;
@@ -941,8 +955,8 @@ function moveDivisionDraft(i,dir){
 }
 async function saveBoardSettings(){
   const d=adminSettingsDraft;
-  const rec=await sbUpdate('board_settings','id=eq.default',{schedule_enabled:d.schedule_enabled,chief_order:d.chief_order,division_order:d.division_order,updated_at:today()});
-  if(rec&&rec[0])db.settings={schedule_enabled:rec[0].schedule_enabled,chief_order:rec[0].chief_order||[],division_order:rec[0].division_order||[]};
+  const rec=await sbUpdate('board_settings','id=eq.default',{schedule_enabled:d.schedule_enabled,chief_order:d.chief_order,division_order:d.division_order,hidden_chiefs:d.hidden_chiefs,updated_at:today()});
+  if(rec&&rec[0])db.settings={schedule_enabled:rec[0].schedule_enabled,chief_order:rec[0].chief_order||[],division_order:rec[0].division_order||[],hidden_chiefs:rec[0].hidden_chiefs||[]};
   adminSettingsDraft=null;
   renderNav();
   toast('設定を保存しました');
