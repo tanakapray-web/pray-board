@@ -197,7 +197,6 @@ button{font-family:inherit;cursor:pointer;}
   .content{padding:16px 14px 60px;}
 }
 </style>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 
@@ -315,15 +314,13 @@ const RL={admin:'管理者',manager:'マネジャー',general:'一般'};
 const RB={admin:'pill-red',manager:'pill-yellow',general:'pill-blue'};
 const EMOJIS=['👍','❤️','😂','😮','🙏','🎉'];
 
-let db={stores:[],users:[],announcements:[],reads:[],comments:[],reactions:[],scheduleDepts:[],schedules:[],settings:{schedule_enabled:true,chief_order:[],division_order:[],hidden_chiefs:[]}};
+let db={stores:[],users:[],announcements:[],reads:[],comments:[],reactions:[],scheduleDepts:[],schedules:[],settings:{schedule_enabled:true,chief_order:[],division_order:[],hidden_chiefs:[]},chiefGoogleCalendars:{}};
 let calMode='individual';
 let calView='month';
 let calDate=new Date();
 let calChief=null;
 let calDivision=null;
-const GOOGLE_CLIENT_ID='1040955138977-d3htojbk4f304hdqpr1v4m2ftc3vll82.apps.googleusercontent.com';
-let googleTokenClient=null;
-let googleAccessToken=null;
+const GOOGLE_API_KEY='AIzaSyDMF-5tHETU3QbfOjXQeGGoxK7qiMBLMU4';
 let googleEventsCache={};
 let googleFetchingRange=null;
 let adminSettingsDraft=null;
@@ -390,7 +387,7 @@ async function tryRestore(){
 async function loadDB(){
   showLoading(true);
   try{
-    const [stores,users,announcements,reads,comments,reactions,scheduleDepts,schedules,settingsRows]=await Promise.all([
+    const [stores,users,announcements,reads,comments,reactions,scheduleDepts,schedules,settingsRows,chiefCals]=await Promise.all([
       sbGet('stores','select=id,name,dept'),
       sbGet('users','select=id,name,role,store_ids,divisions'),
       sbGet('announcements','order=created_at.desc'),
@@ -399,13 +396,16 @@ async function loadDB(){
       sbGet('reactions',''),
       sbGet('schedule_depts','select=id,store_id,name,chiefs'),
       sbGet('schedules','select=date,chief_name,dept,name,start_time,end_time,note,category&order=date.asc'),
-      sbGet('board_settings','id=eq.default')
+      sbGet('board_settings','id=eq.default'),
+      sbGet('chief_google_calendars','')
     ]);
     db.stores=stores||[];db.users=users||[];db.announcements=announcements||[];
     db.reads=reads||[];db.comments=comments||[];db.reactions=reactions||[];
     db.scheduleDepts=scheduleDepts||[];db.schedules=schedules||[];
     const st=(settingsRows||[])[0];
     if(st)db.settings={schedule_enabled:st.schedule_enabled!==false,chief_order:st.chief_order||[],division_order:st.division_order||[],hidden_chiefs:st.hidden_chiefs||[]};
+    db.chiefGoogleCalendars={};
+    (chiefCals||[]).forEach(r=>{db.chiefGoogleCalendars[r.chief_name]=r.calendar_id;});
   }catch(e){console.error('loadDB error',e);}
   showLoading(false);
 }
@@ -550,57 +550,35 @@ function startOfWeekMon(d){const r=new Date(d);const wd=(r.getDay()+6)%7;r.setDa
 function isSameDate(a,b){return fmtDate(a)===fmtDate(b);}
 
 /* ===== Googleカレンダー連携 ===== */
-function isOwnScheduleView(){return calMode==='individual'&&calChief===currentUser.name;}
-function initGoogleClient(){
-  if(googleTokenClient||typeof google==='undefined'||!google.accounts)return;
-  googleTokenClient=google.accounts.oauth2.initTokenClient({
-    client_id:GOOGLE_CLIENT_ID,
-    scope:'https://www.googleapis.com/auth/calendar.readonly',
-    callback:(resp)=>{
-      if(resp&&resp.access_token){
-        googleAccessToken=resp.access_token;
-        googleEventsCache={};
-        toast('Googleカレンダーと連携しました');
-        renderCalendarPage();
-      }
-    }
-  });
-}
-function connectGoogleCalendar(){
-  if(!googleTokenClient){initGoogleClient();}
-  if(!googleTokenClient){toast('読み込み中です。少し待ってからもう一度お試しください');return;}
-  googleTokenClient.requestAccessToken();
-}
-function disconnectGoogleCalendar(){
-  googleAccessToken=null;googleEventsCache={};
-  renderCalendarPage();
-}
-async function ensureGoogleEvents(rangeStart,rangeEnd){
-  if(!googleAccessToken)return;
-  const key=fmtDate(rangeStart)+'_'+fmtDate(rangeEnd);
+function googleCalendarIdFor(chiefName){return db.chiefGoogleCalendars[chiefName]||null;}
+async function ensureGoogleEvents(chiefName,rangeStart,rangeEnd){
+  const calendarId=googleCalendarIdFor(chiefName);
+  if(!calendarId)return;
+  const key=chiefName+'|'+fmtDate(rangeStart)+'_'+fmtDate(rangeEnd);
   if(googleFetchingRange===key)return;
   googleFetchingRange=key;
   try{
     const timeMin=new Date(rangeStart.getFullYear(),rangeStart.getMonth(),rangeStart.getDate(),0,0,0).toISOString();
     const timeMax=new Date(rangeEnd.getFullYear(),rangeEnd.getMonth(),rangeEnd.getDate(),23,59,59).toISOString();
-    const url='https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin='+encodeURIComponent(timeMin)+'&timeMax='+encodeURIComponent(timeMax)+'&singleEvents=true&orderBy=startTime';
-    const res=await fetch(url,{headers:{Authorization:'Bearer '+googleAccessToken}});
-    if(res.status===401){googleAccessToken=null;toast('Google連携の有効期限が切れました。再連携してください');return;}
+    const url='https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calendarId)+'/events?key='+GOOGLE_API_KEY+'&timeMin='+encodeURIComponent(timeMin)+'&timeMax='+encodeURIComponent(timeMax)+'&singleEvents=true&orderBy=startTime';
+    const res=await fetch(url);
+    if(!res.ok){console.error('Google Calendar fetch error',await res.text());return;}
     const data=await res.json();
+    googleEventsCache[chiefName]=googleEventsCache[chiefName]||{};
     (data.items||[]).forEach(ev=>{
       const startStr=ev.start&&(ev.start.dateTime||ev.start.date);
       if(!startStr)return;
       const dateStr=startStr.slice(0,10);
       const startTime=ev.start.dateTime?ev.start.dateTime.slice(11,16):'';
       const endTime=ev.end&&ev.end.dateTime?ev.end.dateTime.slice(11,16):'';
-      googleEventsCache[dateStr]=googleEventsCache[dateStr]||[];
-      googleEventsCache[dateStr].push({title:ev.summary||'(タイトルなし)',start_time:startTime,end_time:endTime});
+      googleEventsCache[chiefName][dateStr]=googleEventsCache[chiefName][dateStr]||[];
+      googleEventsCache[chiefName][dateStr].push({title:ev.summary||'(タイトルなし)',start_time:startTime,end_time:endTime});
     });
     renderCalendarPage();
   }catch(e){console.error('Google Calendar fetch error',e);}
   finally{googleFetchingRange=null;}
 }
-function googleEventsOn(dateStr){return googleEventsCache[dateStr]||[];}
+function googleEventsOn(chiefName,dateStr){return (googleEventsCache[chiefName]&&googleEventsCache[chiefName][dateStr])||[];}
 
 function calNav(dir){
   if(calView==='month')calDate=addMonths(calDate,dir);
@@ -651,12 +629,12 @@ function renderCalendarPage(){
   if(!chiefs.length){
     bodyHtml=`<div class="empty-state"><div class="ic">📅</div>チーフ情報がまだ登録されていません</div>`;
   }else if(calMode==='individual'){
-    if(isOwnScheduleView()){
+    if(googleCalendarIdFor(calChief)){
       let rangeStart,rangeEnd;
       if(calView==='month'){const first=new Date(calDate.getFullYear(),calDate.getMonth(),1);rangeStart=startOfWeekMon(first);rangeEnd=addDays(rangeStart,41);}
       else if(calView==='week'){rangeStart=startOfWeekMon(calDate);rangeEnd=addDays(rangeStart,6);}
       else{rangeStart=calDate;rangeEnd=calDate;}
-      ensureGoogleEvents(rangeStart,rangeEnd);
+      ensureGoogleEvents(calChief,rangeStart,rangeEnd);
     }
     if(calView==='month')bodyHtml=renderMonthGrid(calChief);
     else if(calView==='week')bodyHtml=renderWeekIndividual(calChief);
@@ -667,10 +645,8 @@ function renderCalendarPage(){
     else if(calView==='week')bodyHtml=renderWeekDivision(divChiefs);
     else bodyHtml=renderDayDivision(divChiefs);
   }
-  const googleBtnHtml=isOwnScheduleView()
-    ?(googleAccessToken
-      ?`<button class="cal-nav-btn" onclick="disconnectGoogleCalendar()">🟢 Google連携中(解除)</button>`
-      :`<button class="cal-nav-btn" onclick="connectGoogleCalendar()">📆 Googleカレンダーと連携</button>`)
+  const googleBtnHtml=(calMode==='individual'&&googleCalendarIdFor(calChief))
+    ?`<span class="pill pill-blue">📆 Googleカレンダー連携中</span>`
     :'';
   document.getElementById('content').innerHTML=`
     <div class="page-header"><div><h1>スケジュール</h1><p>スケジュールアプリの登録内容を確認できます(閲覧のみ)</p></div></div>
@@ -693,7 +669,7 @@ function renderMonthGrid(chiefName){
   const first=new Date(calDate.getFullYear(),calDate.getMonth(),1);
   const start=startOfWeekMon(first);
   const dow=['月','火','水','木','金','土','日'];
-  const showGoogle=isOwnScheduleView()&&googleAccessToken;
+  const showGoogle=!!googleCalendarIdFor(chiefName);
   const cellsHtml=[];
   for(let i=0;i<42;i++){
     const d=addDays(start,i);
@@ -701,7 +677,7 @@ function renderMonthGrid(chiefName){
     const dateStr=fmtDate(d);
     const isToday=isSameDate(d,new Date());
     const evs=schedulesOn(dateStr,chiefName);
-    const gevs=showGoogle?googleEventsOn(dateStr):[];
+    const gevs=showGoogle?googleEventsOn(chiefName,dateStr):[];
     const evsHtml=evs.slice(0,3).map(s=>`<div class="ev">${esc((s.start_time||'').slice(0,5))} ${esc(s.name||s.dept||'')}</div>`).join('');
     const gevsHtml=gevs.slice(0,2).map(g=>`<div class="ev g-ev">📆 ${esc((g.start_time||'').slice(0,5))} ${esc(g.title)}</div>`).join('');
     const total=evs.length+gevs.length;
@@ -713,14 +689,14 @@ function renderMonthGrid(chiefName){
 }
 function renderWeekIndividual(chiefName){
   const start=startOfWeekMon(calDate);
-  const showGoogle=isOwnScheduleView()&&googleAccessToken;
+  const showGoogle=!!googleCalendarIdFor(chiefName);
   const cols=[];
   for(let i=0;i<7;i++){
     const d=addDays(start,i);
     const dateStr=fmtDate(d);
     const isToday=isSameDate(d,new Date());
     const evs=schedulesOn(dateStr,chiefName);
-    const gevs=showGoogle?googleEventsOn(dateStr):[];
+    const gevs=showGoogle?googleEventsOn(chiefName,dateStr):[];
     let evsHtml=evs.map(s=>`<div class="week-ev"><div class="t">${esc(s.start_time||'')}${s.end_time?('〜'+esc(s.end_time)):''}</div>${esc(s.name||s.dept||'')}</div>`).join('');
     evsHtml+=gevs.map(g=>`<div class="week-ev google"><div class="t">📆 ${esc(g.start_time||'')}${g.end_time?('〜'+esc(g.end_time)):''}</div>${esc(g.title)}</div>`).join('');
     if(!evsHtml)evsHtml=`<div style="font-size:11px;color:var(--text3);">-</div>`;
@@ -730,9 +706,9 @@ function renderWeekIndividual(chiefName){
 }
 function renderDayIndividual(chiefName){
   const dateStr=fmtDate(calDate);
-  const showGoogle=isOwnScheduleView()&&googleAccessToken;
+  const showGoogle=!!googleCalendarIdFor(chiefName);
   const evs=schedulesOn(dateStr,chiefName);
-  const gevs=showGoogle?googleEventsOn(dateStr):[];
+  const gevs=showGoogle?googleEventsOn(chiefName,dateStr):[];
   if(!evs.length&&!gevs.length)return `<div class="empty-state"><div class="ic">📅</div>この日の予定はありません</div>`;
   const evsHtml=evs.map(s=>`<div class="card" style="cursor:default;"><div class="card-title">${esc(s.start_time||'')}${s.end_time?('〜'+esc(s.end_time)):''}</div><div class="card-body">${esc(s.name||s.dept||'')}${s.note?('　'+esc(s.note)):''}</div></div>`).join('');
   const gevsHtml=gevs.map(g=>`<div class="card" style="cursor:default;border-color:#a8c7fa;"><div class="card-title">📆 ${esc(g.start_time||'')}${g.end_time?('〜'+esc(g.end_time)):''}</div><div class="card-body">${esc(g.title)}</div></div>`).join('');
@@ -992,12 +968,14 @@ function renderAdminSettingsBlock(){
   const d=adminSettingsDraft;
   const chiefRows=d.chief_order.map((c,i)=>{
     const visible=!d.hidden_chiefs.includes(c);
+    const gcal=db.chiefGoogleCalendars[c]||'';
     return `
-    <div class="admin-row" style="padding:8px 12px;">
-      <label style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer;">
+    <div class="admin-row" style="padding:8px 12px;flex-wrap:wrap;">
+      <label style="display:flex;align-items:center;gap:8px;flex:1;min-width:140px;cursor:pointer;">
         <input type="checkbox" ${visible?'checked':''} onchange="toggleChiefVisible('${esc(c)}',this.checked)">
         <div class="admin-row-title">${esc(c)}</div>
       </label>
+      <input type="text" class="form-input" style="max-width:220px;font-size:12px;padding:6px 9px;" placeholder="Googleカレンダー(メールアドレス)" value="${esc(gcal)}" data-gcal-chief="${esc(c)}">
       <div class="admin-actions">
         <button class="btn btn-ghost btn-sm" onclick="moveChiefDraft(${i},-1)" ${i===0?'disabled':''}>▲</button>
         <button class="btn btn-ghost btn-sm" onclick="moveChiefDraft(${i},1)" ${i===d.chief_order.length-1?'disabled':''}>▼</button>
@@ -1019,7 +997,8 @@ function renderAdminSettingsBlock(){
         <input type="checkbox" ${d.schedule_enabled?'checked':''} onchange="adminSettingsDraft.schedule_enabled=this.checked">
         「スケジュール」をサイドバーに表示する(機能全体のオン/オフ)
       </label>
-      <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600;">チーフごとの表示・並び順(チェックを外すとPRAY BOARDに表示されません)</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600;">チーフごとの表示・並び順・Googleカレンダー連携(チェックを外すとPRAY BOARDに表示されません)</div>
+      <div style="font-size:11.5px;color:var(--text3);margin-bottom:10px;">Googleカレンダーを「一般公開」設定にしたチーフのみ、メールアドレスを入力すると社内の誰からでも予定が見えるようになります</div>
       ${chiefRows||'<div style="font-size:12px;color:var(--text3);">チーフが登録されていません</div>'}
       <div style="font-size:12px;color:var(--text2);margin:16px 0 6px;font-weight:600;">事業部の表示順</div>
       ${divRows}
@@ -1045,13 +1024,27 @@ async function saveBoardSettings(){
   const d=adminSettingsDraft;
   const rec=await sbUpdate('board_settings','id=eq.default',{schedule_enabled:d.schedule_enabled,chief_order:d.chief_order,division_order:d.division_order,hidden_chiefs:d.hidden_chiefs,updated_at:today()});
   if(rec&&rec[0])db.settings={schedule_enabled:rec[0].schedule_enabled,chief_order:rec[0].chief_order||[],division_order:rec[0].division_order||[],hidden_chiefs:rec[0].hidden_chiefs||[]};
+  // Googleカレンダー連携の保存
+  const inputs=document.querySelectorAll('[data-gcal-chief]');
+  for(const inp of inputs){
+    const chief=inp.getAttribute('data-gcal-chief');
+    const val=inp.value.trim();
+    const existing=db.chiefGoogleCalendars[chief]||'';
+    if(val===existing)continue;
+    if(val){
+      await sbUpsert('chief_google_calendars',{chief_name:chief,calendar_id:val,updated_at:today()},'chief_name');
+      db.chiefGoogleCalendars[chief]=val;
+    }else{
+      await sbDelete('chief_google_calendars','chief_name=eq.'+encodeURIComponent(chief));
+      delete db.chiefGoogleCalendars[chief];
+    }
+  }
+  googleEventsCache={};
   adminSettingsDraft=null;
   renderNav();
   toast('設定を保存しました');
   renderAdminPage();
 }
-
-window.addEventListener('load',initGoogleClient);
 
 /* ===== 初期化 ===== */
 (async function init(){
